@@ -1,0 +1,34 @@
+export const ROLES = {
+  ADMIN: 'ADMIN',
+  TEACHER: 'TEACHER',
+  STUDENT: 'STUDENT',
+}
+
+export const ROLE_LABELS = {
+  [ROLES.ADMIN]: 'Administrator',
+  [ROLES.TEACHER]: 'Teacher',
+  [ROLES.STUDENT]: 'Student',
+}
+
+export const STATUS = {
+  ACTIVE: 'ACTIVE',
+  INACTIVE: 'INACTIVE',
+  DRAFT: 'DRAFT',
+  PENDING: 'PENDING',
+  SUBMITTED: 'SUBMITTED',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  UPCOMING: 'UPCOMING',
+  CLOSED: 'CLOSED',
+  PUBLISHED: 'PUBLISHED',
+}
+
+export const EXAM_STATUS = {
+  UPCOMING: 'UPCOMING',
+  ACTIVE: 'ACTIVE',
+  CLOSED: 'CLOSED',
+}
+
+export const SEMESTERS = [1, 2, 3, 4, 5, 6]
+
+export const ACADEMIC_YEARS = ['2020-2021', '2021-2022', '2022-2023', '2023-2024', '2024-2025', '2025-2026', '2026-2027']

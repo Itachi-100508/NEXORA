@@ -66,6 +66,7 @@ class StudentListSerializer(serializers.ModelSerializer):
         ret['section'] = self.get_section_display(instance)
         ret['semester'] = self.get_semester_display(instance)
         ret['department'] = self.get_department_display(instance)
+        ret['admission_year'] = instance.admission_year
         return ret
 
 
@@ -116,14 +117,19 @@ class StudentCreateSerializer(serializers.Serializer):
 
     enrollment_number = serializers.CharField(max_length=50)
     roll_number = serializers.CharField(max_length=50)
-    section_id = serializers.IntegerField(required=False, allow_null=True)
     classroom_id = serializers.IntegerField(required=False, allow_null=True)
+    section_id = serializers.IntegerField(required=False, allow_null=True)
     admission_year = serializers.IntegerField(required=False, allow_null=True)
     date_of_birth = serializers.DateField(required=False, allow_null=True)
 
     def validate_username(self, value):
         if User.objects.filter(username=value).exists():
             raise serializers.ValidationError("A user with this username already exists.")
+        return value
+
+    def validate_email(self, value):
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
         return value
 
     def validate_enrollment_number(self, value):
@@ -180,10 +186,15 @@ class StudentCreateSerializer(serializers.Serializer):
 
 
 class StudentUpdateSerializer(serializers.ModelSerializer):
-    first_name = serializers.CharField(source='user.first_name', required=False)
-    last_name = serializers.CharField(source='user.last_name', required=False)
+    first_name = serializers.CharField(source='user.first_name', required=False, allow_blank=True, default='')
+    last_name = serializers.CharField(source='user.last_name', required=False, allow_blank=True, default='')
     email = serializers.EmailField(source='user.email', required=False)
+    roll_number = serializers.CharField(max_length=50, required=False)
+    enrollment_number = serializers.CharField(max_length=50, required=False)
+    classroom_id = serializers.IntegerField(required=False, allow_null=True)
     section_id = serializers.IntegerField(required=False, allow_null=True)
+    admission_year = serializers.IntegerField(required=False, allow_null=True)
+    date_of_birth = serializers.DateField(required=False, allow_null=True)
 
     class Meta:
         model = StudentProfile
@@ -192,15 +203,40 @@ class StudentUpdateSerializer(serializers.ModelSerializer):
             'last_name',
             'email',
             'roll_number',
+            'enrollment_number',
             'section_id',
+            'classroom_id',
             'admission_year',
             'date_of_birth',
             'is_active',
         ]
 
+    def validate_email(self, value):
+        user = self.instance.user if self.instance else None
+        if User.objects.filter(email=value).exclude(id=user.id if user else 0).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value
+
+    def validate_roll_number(self, value):
+        profile = self.instance
+        if profile and StudentProfile.objects.filter(roll_number=value).exclude(id=profile.id).exists():
+            raise serializers.ValidationError("This roll number is already in use.")
+        return value
+
+    def validate_enrollment_number(self, value):
+        profile = self.instance
+        if profile and StudentProfile.objects.filter(enrollment_number=value).exclude(id=profile.id).exists():
+            raise serializers.ValidationError("This enrollment number is already in use.")
+        return value
+
     def validate_section_id(self, value):
         if value is not None and not Section.objects.filter(id=value).exists():
             raise serializers.ValidationError("Selected section does not exist.")
+        return value
+
+    def validate_classroom_id(self, value):
+        if value is not None and not Classroom.objects.filter(id=value).exists():
+            raise serializers.ValidationError("Selected classroom does not exist.")
         return value
 
     def update(self, instance, validated_data):
@@ -212,9 +248,19 @@ class StudentUpdateSerializer(serializers.ModelSerializer):
         if 'last_name' in user_data:
             user.last_name = user_data['last_name']
         if 'email' in user_data:
-            user.email = user_data['email']
+            email = user_data['email']
+            if user.email != email and User.objects.filter(email=email).exclude(id=user.id).exists():
+                raise serializers.ValidationError({"email": "A user with this email already exists."})
+            user.email = email
         user.save()
 
+        # Handle roll_number and enrollment_number
+        if 'roll_number' in validated_data:
+            instance.roll_number = validated_data['roll_number']
+        if 'enrollment_number' in validated_data:
+            instance.enrollment_number = validated_data['enrollment_number']
+
+        # Handle section selection
         section_id = validated_data.pop('section_id', None)
         if section_id is not None:
             section = Section.objects.get(id=section_id)
@@ -222,6 +268,14 @@ class StudentUpdateSerializer(serializers.ModelSerializer):
             if section.classroom:
                 instance.classroom = section.classroom
 
+        # Handle classroom selection (if section is not provided)
+        classroom_id = validated_data.pop('classroom_id', None)
+        if classroom_id is not None:
+            instance.classroom_id = classroom_id
+            if not instance.section or instance.section.classroom_id != classroom_id:
+                instance.section = None  # Clear section if classroom changes
+
+        # Handle other fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
 
@@ -680,3 +734,67 @@ class TeacherAssignmentUpdateSerializer(serializers.ModelSerializer):
         fields = [
             'is_active',
         ]
+
+
+# ============================================================
+# ACADEMIC STRUCTURE SERIALIZERS (Read-only for dropdowns)
+# ============================================================
+
+class DepartmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Department
+        fields = ['id', 'code', 'name']
+
+
+class AcademicYearSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AcademicYear
+        fields = ['id', 'name', 'start_date', 'end_date']
+
+
+class SemesterSerializer(serializers.ModelSerializer):
+    program_code = serializers.CharField(source='program.code', read_only=True)
+    program_name = serializers.CharField(source='program.name', read_only=True)
+
+    class Meta:
+        model = Semester
+        fields = ['id', 'number', 'name', 'program', 'program_code', 'program_name']
+
+
+class ClassroomSerializer(serializers.ModelSerializer):
+    academic_year_name = serializers.CharField(source='academic_year.name', read_only=True, allow_null=True)
+    program_code = serializers.CharField(source='program.code', read_only=True, allow_null=True)
+    program_name = serializers.CharField(source='program.name', read_only=True, allow_null=True)
+    semester_number = serializers.IntegerField(source='semester.number', read_only=True, allow_null=True)
+    semester_name = serializers.CharField(source='semester.name', read_only=True, allow_null=True)
+    department_name = serializers.SerializerMethodField()
+    department_id = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Classroom
+        fields = [
+            'id', 'name', 'code', 'section',
+            'academic_year', 'academic_year_name',
+            'program', 'program_code', 'program_name',
+            'semester', 'semester_number', 'semester_name',
+            'department_name', 'department_id'
+        ]
+
+    def get_department_name(self, obj):
+        if obj.program and obj.program.department:
+            return obj.program.department.name
+        return None
+
+    def get_department_id(self, obj):
+        if obj.program and obj.program.department:
+            return obj.program.department.id
+        return None
+
+
+class SectionSerializer(serializers.ModelSerializer):
+    classroom_name = serializers.CharField(source='classroom.name', read_only=True)
+    classroom_code = serializers.CharField(source='classroom.code', read_only=True)
+
+    class Meta:
+        model = Section
+        fields = ['id', 'name', 'code', 'classroom', 'classroom_name', 'classroom_code', 'capacity']

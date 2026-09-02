@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Plus, GraduationCap, Pencil, Eye, UserX } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Plus, GraduationCap, Pencil, Eye, UserX, Check, Trash2 } from 'lucide-react'
 import { useToast } from '../../context/ToastContext'
-import { getStudents } from '../../services/mock'
+import { studentService } from '../../services/studentService'
+import { academicService } from '../../services/academicService'
+import api, { getUserFriendlyMessage } from '../../services/api'
 import PageHeader from '../../components/ui/PageHeader'
 import Button from '../../components/ui/Button'
 import Card from '../../components/ui/Card'
@@ -17,62 +19,125 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import Input from '../../components/ui/Input'
 import Select from '../../components/ui/Select'
 
-const PAGE_SIZE = 8
+const PAGE_SIZE = 10
 
 const emptyForm = {
   name: '',
   rollNumber: '',
   enrollmentNumber: '',
   email: '',
-  department: '',
-  className: '',
-  academicYear: '2025-2026',
-  semester: 3,
+  departmentId: '',
+  classroomId: '',
+  sectionId: '',
+  admissionYear: '',
 }
 
 export default function Students() {
   const { toast } = useToast()
   const [data, setData] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
   const [modalOpen, setModalOpen] = useState(false)
   const [viewOpen, setViewOpen] = useState(false)
-  const [deleteId, setDeleteId] = useState(null)
+  const [actionId, setActionId] = useState(null)
+  const [actionType, setActionType] = useState(null) // 'activate', 'deactivate', or 'delete'
+  const pendingDeleteIdRef = useRef(null)
   const [form, setForm] = useState(emptyForm)
   const [editId, setEditId] = useState(null)
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
   const [selected, setSelected] = useState(null)
 
+  // Dropdown data
+  const [departments, setDepartments] = useState([])
+  const [classrooms, setClassrooms] = useState([])
+  const [sections, setSections] = useState([])
+  const [academicYears, setAcademicYears] = useState([])
+  const [loadingDropdowns, setLoadingDropdowns] = useState(false)
+
+  const loadDropdowns = useCallback(async () => {
+    try {
+      const [deptRes, yearRes] = await Promise.all([
+        academicService.getDepartments(),
+        academicService.getAcademicYears(),
+      ])
+      setDepartments(deptRes || [])
+      setAcademicYears(yearRes || [])
+      // Initially load all classrooms and sections
+      const [classRes, secRes] = await Promise.all([
+        academicService.getClassrooms(),
+        academicService.getSections(),
+      ])
+      setClassrooms(classRes || [])
+      setSections(secRes || [])
+    } catch (err) {
+      console.error('Error loading dropdowns:', err)
+    }
+  }, [])
+
+  const loadClassroomsByDepartment = useCallback(async (departmentId) => {
+    if (!departmentId) {
+      setClassrooms([])
+      setSections([])
+      return
+    }
+    try {
+      setLoadingDropdowns(true)
+      const classRes = await academicService.getClassroomsByDepartment(departmentId)
+      setClassrooms(classRes || [])
+      setSections([]) // Reset sections when department changes
+    } catch (err) {
+      console.error('Error loading classrooms:', err)
+      setClassrooms([])
+    } finally {
+      setLoadingDropdowns(false)
+    }
+  }, [])
+
+  const loadSectionsByClassroom = useCallback(async (classroomId) => {
+    if (!classroomId) {
+      setSections([])
+      return
+    }
+    try {
+      setLoadingDropdowns(true)
+      const secRes = await academicService.getSectionsByClassroom(classroomId)
+      setSections(secRes || [])
+    } catch (err) {
+      console.error('Error loading sections:', err)
+      setSections([])
+    } finally {
+      setLoadingDropdowns(false)
+    }
+  }, [])
+
   const load = useCallback(async () => {
-    setLoading(true)
-    const res = await getStudents({ search })
-    setData(res.data)
-    setLoading(false)
-  }, [search])
+    try {
+      setLoading(true)
+      const res = await studentService.getAll({ page, search })
+      setData(res.results || res || [])
+      setTotal(res.count || 0)
+    } catch (err) {
+      console.error('Error loading students:', err)
+      setError(getUserFriendlyMessage(err))
+    } finally {
+      setLoading(false)
+    }
+  }, [page, search])
 
   useEffect(() => {
     const t = setTimeout(load, 300)
     return () => clearTimeout(t)
   }, [load])
 
-  const filtered = useMemo(() => {
-    let list = data
-    const q = search.trim().toLowerCase()
-    if (q) {
-      list = list.filter(
-        (s) =>
-          s.name.toLowerCase().includes(q) ||
-          s.rollNumber.toLowerCase().includes(q) ||
-          s.email.toLowerCase().includes(q),
-      )
-    }
-    return list
-  }, [data, search])
+  useEffect(() => {
+    loadDropdowns()
+  }, [loadDropdowns])
 
-  const total = filtered.length
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const paged = data
 
   const openAdd = () => {
     setEditId(null)
@@ -81,11 +146,38 @@ export default function Students() {
     setModalOpen(true)
   }
 
-  const openEdit = (row) => {
-    setEditId(row.id)
-    setForm({ ...emptyForm, ...row })
-    setErrors({})
-    setModalOpen(true)
+  const openEdit = async (row) => {
+    try {
+      // Fetch full student details to get all IDs
+      const details = await studentService.getById(row.id)
+      setEditId(row.id)
+
+      // If student has a department, load classrooms for that department
+      if (details.department_id) {
+        await loadClassroomsByDepartment(details.department_id)
+      }
+
+      // If student has a classroom, load sections for that classroom
+      if (details.class_id) {
+        await loadSectionsByClassroom(details.class_id)
+      }
+
+      setForm({
+        name: `${details.first_name || ''} ${details.last_name || ''}`.trim(),
+        rollNumber: details.roll_number || '',
+        enrollmentNumber: details.enrollment_number || '',
+        email: details.email || '',
+        departmentId: details.department_id || '',
+        classroomId: details.class_id || '',
+        sectionId: details.section_id || '',
+        admissionYear: details.admission_year || '',
+      })
+      setErrors({})
+      setModalOpen(true)
+    } catch (err) {
+      const msg = getUserFriendlyMessage(err)
+      toast.error('Error', msg)
+    }
   }
 
   const openView = (row) => {
@@ -97,34 +189,100 @@ export default function Students() {
     const next = {}
     if (!form.name.trim()) next.name = 'Name is required.'
     if (!form.rollNumber.trim()) next.rollNumber = 'Roll number is required.'
+    if (!form.enrollmentNumber.trim()) next.enrollmentNumber = 'Enrollment number is required.'
     if (!form.email.trim()) next.email = 'Email is required.'
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) next.email = 'Enter a valid email.'
-    if (!form.department) next.department = 'Department is required.'
-    if (!form.className) next.className = 'Class is required.'
     setErrors(next)
     return Object.keys(next).length === 0
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!validate()) return
     setSaving(true)
-    setTimeout(() => {
+    try {
+      const nameParts = form.name.trim().split(/\s+/)
+      const firstName = nameParts[0] || ''
+      const lastName = nameParts.slice(1).join(' ') || ''
+
       if (editId) {
-        setData((prev) => prev.map((s) => (s.id === editId ? { ...s, ...form } : s)))
+        // Update existing student
+        const payload = {
+          first_name: firstName,
+          last_name: lastName,
+          email: form.email,
+          roll_number: form.rollNumber,
+          enrollment_number: form.enrollmentNumber,
+          classroom_id: form.classroomId || null,
+          section_id: form.sectionId || null,
+          admission_year: form.admissionYear || null,
+        }
+        await studentService.update(editId, payload)
+        // Reload data to get updated info from backend
+        await load()
         toast.success('Student updated', `${form.name} was updated successfully.`)
       } else {
-        setData((prev) => [...prev, { id: Date.now(), ...form, status: 'ACTIVE' }])
+        // Create new student - need username and password
+        const payload = {
+          username: form.email.split('@')[0],
+          email: form.email,
+          password: 'Password123!', // Demo password
+          first_name: firstName,
+          last_name: lastName,
+          enrollment_number: form.enrollmentNumber,
+          roll_number: form.rollNumber,
+          classroom_id: form.classroomId || null,
+          section_id: form.sectionId || null,
+          admission_year: form.admissionYear || null,
+        }
+        await studentService.create(payload)
+        // Reload data to see new student
+        setPage(1)
+        await load()
         toast.success('Student added', `${form.name} was added successfully.`)
       }
-      setSaving(false)
       setModalOpen(false)
-    }, 600)
+    } catch (err) {
+      const msg = getUserFriendlyMessage(err)
+      toast.error('Error', msg)
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleDelete = () => {
-    setDeleteId(null)
-    setData((prev) => prev.filter((s) => s.id !== deleteId))
-    toast.success('Student removed', 'The student record was deactivated.')
+  const handleStatusChange = async () => {
+    const id = actionId
+    const type = actionType
+    setActionId(null)
+    setActionType(null)
+    try {
+      if (type === 'activate') {
+        await studentService.activate(id)
+        await load()
+        toast.success('Student activated', 'The student is now active and can log in.')
+      } else if (type === 'deactivate') {
+        await studentService.deactivate(id)
+        await load()
+        toast.success('Student deactivated', 'The student record was deactivated.')
+      }
+    } catch (err) {
+      const msg = getUserFriendlyMessage(err)
+      toast.error('Error', msg)
+    }
+  }
+
+  const handleDelete = async () => {
+    const id = pendingDeleteIdRef.current
+    pendingDeleteIdRef.current = null
+    setActionId(null)
+    setActionType(null)
+    try {
+      await studentService.permanentDelete(id)
+      await load()
+      toast.success('Student deleted', 'The student has been permanently deleted.')
+    } catch (err) {
+      const msg = getUserFriendlyMessage(err)
+      toast.error('Error', msg)
+    }
   }
 
   const columns = [
@@ -141,11 +299,13 @@ export default function Students() {
         </div>
       ),
     },
-    { key: 'rollNumber', header: 'Roll No.', render: (r) => <span className="muted">{r.rollNumber}</span> },
-    { key: 'className', header: 'Class' },
-    { key: 'department', header: 'Department' },
-    { key: 'semester', header: 'Semester', render: (r) => <Badge variant="secondary">{r.semester}</Badge> },
-    { key: 'status', header: 'Status', render: (r) => <StatusBadge status={r.status} /> },
+    { key: 'roll_number', header: 'Roll No.', render: (r) => <span className="muted">{r.roll_number}</span> },
+    { key: 'class', header: 'Class', render: (r) => r.class || '—' },
+    { key: 'section', header: 'Section', render: (r) => r.section || '—' },
+    { key: 'department', header: 'Department', render: (r) => r.department || '—' },
+    { key: 'semester', header: 'Semester', render: (r) => r.semester ? <Badge variant="secondary">{r.semester}</Badge> : '—' },
+    { key: 'admission_year', header: 'Year', render: (r) => r.admission_year || '—' },
+    { key: 'is_active', header: 'Status', render: (r) => <StatusBadge status={r.is_active ? 'ACTIVE' : 'INACTIVE'} /> },
     {
       key: 'actions',
       header: '',
@@ -158,8 +318,34 @@ export default function Students() {
           <button className="icon-btn" onClick={() => openEdit(row)} aria-label="Edit" title="Edit">
             <Pencil size={16} />
           </button>
-          <button className="icon-btn" onClick={() => setDeleteId(row.id)} aria-label="Deactivate" title="Deactivate">
-            <UserX size={16} />
+          {row.is_active ? (
+            <button
+              className="icon-btn"
+              onClick={() => { setActionId(row.id); setActionType('deactivate'); }}
+              aria-label="Deactivate"
+              title="Deactivate"
+            >
+              <UserX size={16} />
+            </button>
+          ) : (
+            <button
+              className="icon-btn"
+              onClick={() => { setActionId(row.id); setActionType('activate'); }}
+              aria-label="Activate"
+              title="Activate"
+              style={{ color: 'var(--success)' }}
+            >
+              <Check size={16} />
+            </button>
+          )}
+          <button
+            className="icon-btn"
+            onClick={() => { pendingDeleteIdRef.current = row.id; setActionId(row.id); setActionType('delete'); }}
+            aria-label="Delete permanently"
+            title="Delete permanently"
+            style={{ color: 'var(--danger)' }}
+          >
+            <Trash2 size={16} />
           </button>
         </div>
       ),
@@ -203,34 +389,115 @@ export default function Students() {
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editId ? 'Edit Student' : 'Add Student'} size="lg">
         <div className="grid grid-2">
-          <Input label="Full Name" value={form.name} required onChange={(e) => setForm({ ...form, name: e.target.value })} error={errors.name} />
-          <Input label="Roll Number" value={form.rollNumber} onChange={(e) => setForm({ ...form, rollNumber: e.target.value })} error={errors.rollNumber} />
-          <Input label="Enrollment Number" value={form.enrollmentNumber} onChange={(e) => setForm({ ...form, enrollmentNumber: e.target.value })} />
-          <Input label="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} error={errors.email} />
-          <Select label="Department" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} required error={errors.department}>
+          <Input
+            label="Full Name"
+            value={form.name}
+            required
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            error={errors.name}
+          />
+          <Input
+            label="Email"
+            type="email"
+            value={form.email}
+            required
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            error={errors.email}
+          />
+          <Input
+            label="Roll Number"
+            value={form.rollNumber}
+            required
+            onChange={(e) => setForm({ ...form, rollNumber: e.target.value })}
+            error={errors.rollNumber}
+          />
+          <Input
+            label="Enrollment Number"
+            value={form.enrollmentNumber}
+            required
+            onChange={(e) => setForm({ ...form, enrollmentNumber: e.target.value })}
+            error={errors.enrollmentNumber}
+          />
+          <Select
+            label="Department"
+            value={form.departmentId}
+            onChange={(e) => {
+              const deptId = e.target.value
+              setForm({ ...form, departmentId: deptId, classroomId: '', sectionId: '' })
+              if (deptId) {
+                loadClassroomsByDepartment(deptId)
+              } else {
+                setClassrooms([])
+                setSections([])
+              }
+            }}
+          >
             <option value="">Select department</option>
-            {['Computer Science', 'Electronics & Telecom', 'Mechanical Engineering', 'Civil Engineering'].map((d) => (
-              <option key={d} value={d}>{d}</option>
+            {departments.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name} ({d.code})
+              </option>
             ))}
           </Select>
-          <Select label="Class" value={form.className} onChange={(e) => setForm({ ...form, className: e.target.value })} required error={errors.className}>
+          <Select
+            label="Class"
+            value={form.classroomId}
+            onChange={(e) => {
+              const classId = e.target.value
+              setForm({ ...form, classroomId: classId, sectionId: '' })
+              if (classId) {
+                loadSectionsByClassroom(classId)
+              } else {
+                setSections([])
+              }
+            }}
+            disabled={!form.departmentId}
+          >
             <option value="">Select class</option>
-            {['SE-I B', 'TE-II A', 'BE-I C'].map((c) => (
-              <option key={c} value={c}>{c}</option>
+            {classrooms.length === 0 && form.departmentId && !loadingDropdowns && (
+              <option value="" disabled>No classes available for this department</option>
+            )}
+            {classrooms.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} ({c.code})
+              </option>
             ))}
           </Select>
-          <Select label="Academic Year" value={form.academicYear} onChange={(e) => setForm({ ...form, academicYear: e.target.value })}>
-            {['2024-2025', '2025-2026', '2026-2027'].map((y) => (
-              <option key={y} value={y}>{y}</option>
+          <Select
+            label="Section"
+            value={form.sectionId}
+            onChange={(e) => setForm({ ...form, sectionId: e.target.value })}
+            disabled={!form.classroomId}
+          >
+            <option value="">Select section</option>
+            {sections.length === 0 && form.classroomId && !loadingDropdowns && (
+              <option value="" disabled>No sections available for this class</option>
+            )}
+            {sections.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
             ))}
           </Select>
-          <Select label="Semester" value={form.semester} onChange={(e) => setForm({ ...form, semester: Number(e.target.value) })}>
-            {[1, 2, 3, 4, 5, 6].map((s) => (
-              <option key={s} value={s}>Semester {s}</option>
+          <Select
+            label="Admission Year"
+            value={form.admissionYear}
+            onChange={(e) => setForm({ ...form, admissionYear: e.target.value })}
+          >
+            <option value="">Select admission year</option>
+            {[2022, 2023, 2024, 2025, 2026, 2027].map((year) => (
+              <option key={year} value={year}>
+                {year}
+              </option>
             ))}
           </Select>
         </div>
-        <div className="flex justify-between" style={{ gap: 10, marginTop: 8 }}>
+        {!editId && (
+          <div className="muted" style={{ fontSize: 13, marginTop: 8 }}>
+            Note: Default password will be set to "Password123!" for new students.
+          </div>
+        )}
+        <div className="flex justify-between" style={{ gap: 10, marginTop: 16 }}>
           <Button variant="ghost" onClick={() => setModalOpen(false)}>Cancel</Button>
           <Button onClick={handleSave} loading={saving}>{editId ? 'Update Student' : 'Add Student'}</Button>
         </div>
@@ -243,29 +510,37 @@ export default function Students() {
               <Avatar name={selected.name} size="lg" />
               <div>
                 <div style={{ fontWeight: 700, fontSize: 17 }}>{selected.name}</div>
-                <div className="muted">{selected.rollNumber}</div>
+                <div className="muted">{selected.roll_number}</div>
               </div>
             </div>
             <div style={{ borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
-              <div className="detail-row"><span className="k">Enrollment No.</span><span className="v">{selected.enrollmentNumber || '—'}</span></div>
+              <div className="detail-row"><span className="k">Enrollment No.</span><span className="v">{selected.enrollment_number || '—'}</span></div>
               <div className="detail-row"><span className="k">Email</span><span className="v">{selected.email}</span></div>
-              <div className="detail-row"><span className="k">Department</span><span className="v">{selected.department}</span></div>
-              <div className="detail-row"><span className="k">Class</span><span className="v">{selected.className}</span></div>
-              <div className="detail-row"><span className="k">Academic Year</span><span className="v">{selected.academicYear}</span></div>
-              <div className="detail-row"><span className="k">Semester</span><span className="v">Semester {selected.semester}</span></div>
-              <div className="detail-row"><span className="k">Status</span><span className="v"><StatusBadge status={selected.status} /></span></div>
+              <div className="detail-row"><span className="k">Username</span><span className="v">{selected.username || '—'}</span></div>
+              <div className="detail-row"><span className="k">Department</span><span className="v">{selected.department || '—'}</span></div>
+              <div className="detail-row"><span className="k">Class</span><span className="v">{selected.class || '—'}</span></div>
+              <div className="detail-row"><span className="k">Section</span><span className="v">{selected.section || '—'}</span></div>
+              <div className="detail-row"><span className="k">Semester</span><span className="v">{selected.semester ? `Semester ${selected.semester}` : '—'}</span></div>
+              <div className="detail-row"><span className="k">Admission Year</span><span className="v">{selected.admission_year || '—'}</span></div>
+              <div className="detail-row"><span className="k">Status</span><span className="v"><StatusBadge status={selected.is_active ? 'ACTIVE' : 'INACTIVE'} /></span></div>
             </div>
           </div>
         )}
       </Modal>
 
       <ConfirmDialog
-        open={Boolean(deleteId)}
-        title="Deactivate student?"
-        description="This student record will be deactivated and will no longer appear in active lists. You can reactivate later."
-        confirmLabel="Deactivate"
-        onCancel={() => setDeleteId(null)}
-        onConfirm={handleDelete}
+        open={Boolean(actionId)}
+        title={actionType === 'activate' ? 'Activate student?' : actionType === 'deactivate' ? 'Deactivate student?' : 'Delete student permanently?'}
+        description={
+          actionType === 'activate'
+            ? 'This student will be activated and will be able to log in to their account.'
+            : actionType === 'deactivate'
+              ? 'This student record will be deactivated and will no longer appear in active lists. You can reactivate later.'
+              : 'This will permanently delete this student and cannot be undone. All associated data will be removed.'
+        }
+        confirmLabel={actionType === 'activate' ? 'Activate' : actionType === 'deactivate' ? 'Deactivate' : 'Delete permanently'}
+        onCancel={() => { pendingDeleteIdRef.current = null; setActionId(null); setActionType(null); }}
+        onConfirm={actionType === 'delete' ? handleDelete : handleStatusChange}
       />
     </div>
   )

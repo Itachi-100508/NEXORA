@@ -1,0 +1,40 @@
+#!/usr/bin/env python
+"""
+Root cause analysis: What is the username_field in TokenObtainPairSerializer?
+"""
+
+# According to Django REST Framework SimpleJWT documentation:
+# TokenObtainPairSerializer.username_field is set to get_user_model().USERNAME_FIELD
+# For Django's AbstractUser (which our custom User extends), USERNAME_FIELD = 'username'
+
+# So the CustomTokenObtainPairSerializer expects:
+# {
+#   "username": "...",  # Can be email or username - serializer converts email to username
+#   "password": "..."
+# }
+
+# Response format from CustomTokenObtainPairSerializer.validate():
+# {
+#   "access": "<access_token>",
+#   "refresh": "<refresh_token>",
+#   "user": { ...UserSerializer data... }
+# }
+
+# ISSUE FOUND:
+# In frontend/src/context/AuthContext.jsx line 67:
+# const newToken = res.token || res.access || res.accessToken
+#
+# The backend returns "access" and "refresh", NOT "token" or "accessToken"
+# So res.token will be undefined, res.access will work.
+
+print("Root Cause: Token field name mismatch")
+print("Backend returns: { access, refresh, user }")
+print("Frontend expects: { token, accessToken, or access }")
+print("")
+print("The AuthContext.jsx line 67 has the right fallback chain:")
+print('  const newToken = res.token || res.access || res.accessToken')
+print("")
+print("So res.access should be picked up correctly.")
+print("")
+print("ACTUAL ROOT CAUSE: Check if demo users exist in the database!")
+print("If demo users don't exist, login will fail with 401 Unauthorized")

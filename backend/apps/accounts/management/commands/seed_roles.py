@@ -14,8 +14,8 @@ class Command(BaseCommand):
         demo_users = [
             {
                 "username": "admin",
-                "email": "admin@prterra.local",
-                "password": "AdminPassword123!",
+                "email": "admin@examora.edu",
+                "password": "password",
                 "first_name": "System",
                 "last_name": "Admin",
                 "role": User.Role.ADMIN,
@@ -24,8 +24,8 @@ class Command(BaseCommand):
             },
             {
                 "username": "teacher",
-                "email": "teacher@prterra.local",
-                "password": "TeacherPassword123!",
+                "email": "teacher@examora.edu",
+                "password": "password",
                 "first_name": "Demo",
                 "last_name": "Teacher1",
                 "role": User.Role.TEACHER,
@@ -34,8 +34,8 @@ class Command(BaseCommand):
             },
             {
                 "username": "teacher2",
-                "email": "teacher2@prterra.local",
-                "password": "TeacherPassword123!",
+                "email": "teacher2@examora.edu",
+                "password": "password",
                 "first_name": "Demo",
                 "last_name": "Teacher2",
                 "role": User.Role.TEACHER,
@@ -44,8 +44,8 @@ class Command(BaseCommand):
             },
             {
                 "username": "student",
-                "email": "student@prterra.local",
-                "password": "StudentPassword123!",
+                "email": "student@examora.edu",
+                "password": "password",
                 "first_name": "Demo",
                 "last_name": "Student",
                 "role": User.Role.STUDENT,

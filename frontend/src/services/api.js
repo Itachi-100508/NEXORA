@@ -47,7 +47,24 @@ export function getUserFriendlyMessage(error) {
   }
 
   const status = error.response?.status
-  const backendMessage = error.response?.data?.message || error.response?.data?.error
+  const data = error.response?.data
+
+  // Extract field-level validation errors from DRF (e.g., {"username": ["error msg"], "email": ["error msg"]})
+  if (status === 400 && data && typeof data === 'object' && !Array.isArray(data)) {
+    const fieldErrors = []
+    for (const [field, errors] of Object.entries(data)) {
+      if (Array.isArray(errors)) {
+        fieldErrors.push(`${field}: ${errors.join(', ')}`)
+      } else if (typeof errors === 'string') {
+        fieldErrors.push(`${field}: ${errors}`)
+      }
+    }
+    if (fieldErrors.length > 0) {
+      return fieldErrors.join('\n')
+    }
+  }
+
+  const backendMessage = data?.message || data?.error
 
   const messages = {
     400: backendMessage || 'Invalid request. Please review your input.',

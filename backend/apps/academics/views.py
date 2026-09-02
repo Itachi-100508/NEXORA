@@ -1,11 +1,15 @@
 from rest_framework import viewsets, mixins, status, filters
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 from django.db import models
 
 from apps.accounts.permissions import IsAdmin
-from .models import StudentProfile, TeacherProfile, Subject, TeacherAssignment
+from .models import (
+    StudentProfile, TeacherProfile, Subject, TeacherAssignment,
+    Department, AcademicYear, Semester, Classroom, Section
+)
 from .serializers import (
     StudentListSerializer,
     StudentDetailSerializer,
@@ -22,6 +26,11 @@ from .serializers import (
     TeacherAssignmentDetailSerializer,
     TeacherAssignmentCreateSerializer,
     TeacherAssignmentUpdateSerializer,
+    DepartmentSerializer,
+    AcademicYearSerializer,
+    SemesterSerializer,
+    ClassroomSerializer,
+    SectionSerializer,
 )
 
 
@@ -150,6 +159,40 @@ class StudentViewSet(viewsets.ModelViewSet):
             {"message": "Student deactivated successfully"},
             status=status.HTTP_200_OK
         )
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsAdmin])
+    def activate(self, request, pk=None):
+        """Activate a student by setting is_active=True for both profile and user."""
+        student_profile = self.get_object()
+        student_profile.is_active = True
+        student_profile.save()
+        if student_profile.user:
+            student_profile.user.is_active = True
+            student_profile.user.save()
+
+        serializer = StudentDetailSerializer(student_profile)
+        return Response({
+            "message": "Student activated successfully",
+            "student": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['delete'], url_path='permanent-delete', permission_classes=[IsAuthenticated, IsAdmin])
+    def permanent_delete(self, request, pk=None):
+        """Permanently delete a student and their associated user account."""
+        student_profile = self.get_object()
+
+        # Get the user before deleting the profile
+        user = student_profile.user
+
+        # Delete the student profile (this won't cascade to User due to OneToOne with CASCADE on profile->user)
+        student_profile.delete()
+
+        # Now delete the user account
+        user.delete()
+
+        return Response({
+            "message": "Student permanently deleted successfully"
+        }, status=status.HTTP_200_OK)
 
 
 class TeacherViewSet(
@@ -389,3 +432,76 @@ class TeacherAssignmentViewSet(
         updated_assignment = serializer.save()
         output_serializer = TeacherAssignmentDetailSerializer(updated_assignment)
         return Response(output_serializer.data, status=status.HTTP_200_OK)
+
+
+# ============================================================
+# ACADEMIC STRUCTURE VIEWSETS (Read-only for dropdowns)
+# ============================================================
+
+class DepartmentViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only endpoint for departments (for dropdowns)."""
+    permission_classes = [IsAuthenticated]
+    queryset = Department.objects.filter(is_active=True).order_by('code')
+    serializer_class = DepartmentSerializer
+
+
+class AcademicYearViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only endpoint for academic years (for dropdowns)."""
+    permission_classes = [IsAuthenticated]
+    queryset = AcademicYear.objects.filter(is_active=True).order_by('-name')
+    serializer_class = AcademicYearSerializer
+
+
+class SemesterViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only endpoint for semesters (for dropdowns)."""
+    permission_classes = [IsAuthenticated]
+    queryset = Semester.objects.select_related('program').order_by('program', 'number')
+    serializer_class = SemesterSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        program_id = self.request.query_params.get('program_id')
+        if program_id:
+            queryset = queryset.filter(program_id=program_id)
+        return queryset
+
+
+class ClassroomViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only endpoint for classrooms (for dropdowns)."""
+    permission_classes = [IsAuthenticated]
+    queryset = Classroom.objects.select_related(
+        'academic_year', 'program', 'semester'
+    ).filter(is_active=True).order_by('code')
+    serializer_class = ClassroomSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        params = self.request.query_params
+
+        department_id = params.get('department_id')
+        if department_id:
+            queryset = queryset.filter(program__department_id=department_id)
+
+        academic_year_id = params.get('academic_year_id')
+        if academic_year_id:
+            queryset = queryset.filter(academic_year_id=academic_year_id)
+
+        program_id = params.get('program_id')
+        if program_id:
+            queryset = queryset.filter(program_id=program_id)
+
+        return queryset
+
+
+class SectionViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only endpoint for sections (for dropdowns)."""
+    permission_classes = [IsAuthenticated]
+    queryset = Section.objects.select_related('classroom').filter(is_active=True).order_by('code')
+    serializer_class = SectionSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        classroom_id = self.request.query_params.get('classroom_id')
+        if classroom_id:
+            queryset = queryset.filter(classroom_id=classroom_id)
+        return queryset

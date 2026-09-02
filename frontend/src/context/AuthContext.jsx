@@ -7,6 +7,7 @@ const AuthContext = createContext(null)
 
 const USER_KEY = 'examora_user'
 const TOKEN_KEY = 'examora_token'
+const REFRESH_TOKEN_KEY = 'examora_refresh_token'
 
 function isNetworkError(error) {
   return !error?.response || error?.code === 'ECONNABORTED' || error?.message === 'Network Error'
@@ -42,11 +43,14 @@ export function AuthProvider({ children }) {
     restoreSession()
   }, [token])
 
-  const persist = (newToken, newUser) => {
+  const persist = (newToken, newUser, refreshToken) => {
     setToken(newToken)
     setUser(newUser)
     localStorage.setItem(TOKEN_KEY, newToken)
     localStorage.setItem(USER_KEY, JSON.stringify(newUser))
+    if (refreshToken) {
+      localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
+    }
   }
 
   const isMock = (res) => typeof res?.token === 'string' && res.token.startsWith('mock-')
@@ -54,15 +58,16 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     let res
     try {
-      res = await authService.login({ email, password })
+      res = await authService.login(email, password)
     } catch (error) {
       if (!isNetworkError(error)) throw error
       res = await mockLogin(email, password)
       window.__EXAMORA_MOCK__ = true
     }
-    const newToken = res.token || res.accessToken
+    const newToken = res.token || res.access || res.accessToken
+    const newRefreshToken = res.refresh || res.refreshToken
     const newUser = res.user
-    persist(newToken, newUser)
+    persist(newToken, newUser, newRefreshToken)
     return { user: newUser, isMock: isMock(res) }
   }
 
@@ -77,15 +82,19 @@ export function AuthProvider({ children }) {
   }
 
   const logout = async () => {
+    const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY)
     try {
-      await authService.logout()
+      if (refreshToken) {
+        await authService.logout(refreshToken)
+      }
     } catch {
-      // ignore
+      // ignore logout errors
     }
     setUser(null)
     setToken(null)
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(USER_KEY)
+    localStorage.removeItem(REFRESH_TOKEN_KEY)
   }
 
   const updateUser = useCallback((patch) => {

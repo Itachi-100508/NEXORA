@@ -2079,3 +2079,502 @@ body { transition: background var(--transition-slow), color var(--transition-slo
   .official-doc-container { max-width: 100% !important; }
 }
 
+/* =========================================================
+   ATTENDANCE MANAGEMENT MODULE
+   ========================================================= */
+
+.attendance-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.attendance-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  width: fit-content;
+  max-width: 100%;
+}
+
+.attendance-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.attendance-tab:hover {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.attendance-tab.active {
+  background: var(--surface);
+  color: var(--primary);
+  box-shadow: 0 1px 3px rgba(23, 32, 51, 0.08);
+}
+
+.attendance-context-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.attendance-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 20px;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.attendance-toggle-group {
+  display: inline-flex;
+  gap: 6px;
+  justify-content: center;
+}
+
+.attendance-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.attendance-toggle:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.attendance-toggle.present {
+  background: var(--success-light);
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
+  color: var(--success-dark);
+}
+
+.attendance-toggle.absent {
+  background: var(--danger-light);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  color: var(--danger);
+}
+
+.attendance-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  box-shadow: 0 1px 0 var(--border);
+}
+
+.attendance-table tr.row-unmarked td {
+  background: color-mix(in srgb, var(--warning) 5%, transparent);
+}
+
+.student-summary-select {
+  max-width: 160px;
+}
+
+.row-low-attendance td {
+  background: color-mix(in srgb, var(--danger) 5%, transparent);
+}
+
+.row-low-attendance:hover td {
+  background: color-mix(in srgb, var(--danger) 8%, transparent) !important;
+}
+
+.export-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 200px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 6px;
+  z-index: 40;
+}
+
+.export-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--transition-fast);
+}
+
+.export-menu-item:hover {
+  background: var(--bg);
+}
+
+.export-menu-item .export-menu-icon {
+  color: var(--primary);
+  display: inline-flex;
+}
+
+@media (max-width: 640px) {
+  .attendance-tabs {
+    width: 100%;
+    overflow-x: auto;
+  }
+  .attendance-tab {
+    flex: 1;
+    justify-content: center;
+    white-space: nowrap;
+  }
+  .attendance-toggle-group {
+    flex-direction: column;
+  }
+  .attendance-table th, .attendance-table td {
+    padding: 10px 10px;
+  }
+}
+
+/* ===== PHASE 1 - Exam Command Center, Alerts, Anomalies, Calendar, Seating, Invigilation ===== */
+.section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.link-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.link-more:hover {
+  text-decoration: underline;
+}
+
+.phase1-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.phase1-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.phase1-item.unread {
+  border-color: color-mix(in srgb, var(--primary) 35%, transparent);
+  background: color-mix(in srgb, var(--primary) 4%, var(--surface));
+}
+
+.phase1-item-ic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.phase1-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.phase1-item-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.phase1-item-sub {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.phase1-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.next-event {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+}
+
+.next-event-date {
+  text-align: center;
+  padding-right: 14px;
+  border-right: 1px solid var(--border);
+  min-width: 64px;
+}
+
+.next-event-day {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--primary);
+  line-height: 1;
+}
+
+.next-event-body {
+  flex: 1;
+}
+
+.health-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.health-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+}
+
+.health-item-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.health-item-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.alert-list,
+.anomaly-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.alert-item,
+.anomaly-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+}
+
+.alert-item.unread {
+  border-color: color-mix(in srgb, var(--primary) 40%, transparent);
+  background: color-mix(in srgb, var(--primary) 5%, var(--surface));
+}
+
+.alert-item-body,
+.anomaly-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.alert-item-meta {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+.anomaly-item.open {
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+}
+
+.anomaly-reco {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.room-block {
+  margin-bottom: 18px;
+}
+
+.room-head {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.seating-grid {
+  display: grid;
+  gap: 6px;
+}
+
+.seat-cell {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 6px;
+  text-align: center;
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.seat-cell.filled {
+  background: color-mix(in srgb, var(--primary) 7%, var(--surface));
+  border-color: color-mix(in srgb, var(--primary) 30%, transparent);
+}
+
+.seat-code {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.seat-roll {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 2px;
+  word-break: break-all;
+}
+
+.duty-card {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.duty-card-body {
+  flex: 1;
+}
+
+.ai-demo-tag {
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--warning);
+}
+
+@media (max-width: 640px) {
+  .health-grid {
+    grid-template-columns: 1fr;
+  }
+  .alert-item,
+  .anomaly-item {
+    flex-direction: column;
+  }
+}
+
+/* ============ PHASE 2 ============ */
+.truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.notif-filter-chip {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 14px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.notif-filter-chip:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.notif-filter-chip.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+.notif-filter-chip:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.phase2-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+button.link-more {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+@media (max-width: 640px) {
+  .grid-2-wide > * {
+    min-width: 0;
+  }
+}
+
+

@@ -19,6 +19,24 @@ const ACTION_OPTIONS = ['PUBLISHED', 'APPROVED', 'REJECTED', 'SUBMITTED', 'VERIF
 
 export { ACTION_OPTIONS }
 
+let auditSeq = auditStore.reduce((m, l) => Math.max(m, l.id), 0)
+
+export async function logAuditEntry({ actor, role, action, entity, entityId, detail, ip = '10.0.0.1' }) {
+  auditStore.unshift({
+    id: ++auditSeq,
+    userId: `${role}-${String(actor).toLowerCase().replace(/[^a-z]/g, '') || '000'}`,
+    actor,
+    role,
+    action,
+    entity,
+    entityId: String(entityId || ''),
+    ip,
+    timestamp: new Date().toISOString(),
+    detail,
+  })
+  return { id: auditSeq }
+}
+
 export async function getAuditLogs(params = {}) {
   await delay(300)
   let data = [...auditStore]

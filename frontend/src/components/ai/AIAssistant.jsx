@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Bot, Send, Sparkles, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
-import { getAIResponse, getSuggestedPrompts } from '../../services/mock'
+import { aiIntelligenceService } from '../../services'
 
 export default function AIAssistant() {
   const { user } = useAuth()
@@ -16,16 +16,22 @@ export default function AIAssistant() {
 
   useEffect(() => {
     if (open) {
-      setSuggestions(getSuggestedPrompts(role))
+      let cancelled = false
+      aiIntelligenceService.prompts(role).then((res) => {
+        if (!cancelled) setSuggestions(res.data || [])
+      })
       setMessages((m) => {
         if (m.length) return m
         return [
           {
             role: 'bot',
-            text: `Hi ${user?.name?.split(' ')[0] || 'there'}! I'm your EXAMORA assistant. Ask me about results, marks entry, reports or revaluations. Demo mode — I never compute official marks or grades.`,
+            text: `Hi ${user?.name?.split(' ')[0] || 'there'}! I'm your EXAMORA academic intelligence. Ask me about exams, alerts, anomalies, seating, invigilation or your results. Demo mode — I never compute official marks or grades.`,
           },
         ]
       })
+      return () => {
+        cancelled = true
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
@@ -41,9 +47,11 @@ export default function AIAssistant() {
     setSuggestions([])
     setMessages((m) => [...m, { role: 'user', text: q }])
     setBusy(true)
-    const answer = await getAIResponse(q, role, { student: null })
+    const res = await aiIntelligenceService.ask(q, role, { student: null })
+    const answer = res.data?.answer || res.data || 'No response available.'
     setBusy(false)
-    setMessages((m) => [...m, { role: 'bot', text: answer }])
+    const isOffline = Boolean(res.offline)
+    setMessages((m) => [...m, { role: 'bot', text: answer, meta: isOffline ? 'EXAMORA Intelligence — Demo Mode' : undefined }])
   }
 
   return (
@@ -73,14 +81,15 @@ export default function AIAssistant() {
                 <Bot size={22} />
               </div>
               <div>
-                <h3>EXAMORA Assistant</h3>
-                <div className="sub">Demo intelligence · answers from curated data</div>
+                <h3>EXAMORA Intelligence</h3>
+                <div className="sub">Demo Mode · curated academic data</div>
               </div>
             </div>
             <div className="ai-body" ref={bodyRef}>
               {messages.map((m, i) => (
                 <div key={i} className={`ai-msg ${m.role}`}>
                   {m.text}
+                  {m.meta && <div className="ai-demo-tag">{m.meta}</div>}
                 </div>
               ))}
               {busy && <div className="ai-msg bot">Thinking…</div>}

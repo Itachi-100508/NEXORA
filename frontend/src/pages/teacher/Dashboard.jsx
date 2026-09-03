@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { School, BookOpen, Timer, Send, CheckCircle2, XCircle, PenLine, ArrowRight } from 'lucide-react'
+import { School, BookOpen, Timer, Send, CheckCircle2, XCircle, PenLine, ArrowRight, CalendarCheck, TrendingUp } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
-import { getStats } from '../../services/mock'
+import { getStats, getWeeklyAttendance } from '../../services/mock'
+import { workloadService } from '../../services'
 import { getGreeting } from '../../utils/helpers'
 import StatCard from '../../components/ui/StatCard'
 import Card from '../../components/ui/Card'
@@ -18,20 +19,30 @@ export default function TeacherDashboard() {
   const navigate = useNavigate()
   const [stats, setStats] = useState(null)
   const [recent, setRecent] = useState([])
+  const [attendancePct, setAttendancePct] = useState(null)
+  const [workload, setWorkload] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let mounted = true
-    getStats('teacher').then((res) => {
+    ;(async () => {
+      const [statsRes, weekRes, wlRes] = await Promise.allSettled([getStats('teacher'), getWeeklyAttendance(5, 'A', 0), workloadService.getMine(user?.id || 'teacher-001')])
       if (!mounted) return
-      setStats(res.stats)
-      setRecent(res.recentSubmissions)
+      if (statsRes.status === 'fulfilled') {
+        setStats(statsRes.value.stats)
+        setRecent(statsRes.value.recentSubmissions)
+      }
+      if (weekRes.status === 'fulfilled' && weekRes.value.days.length) {
+        const last = weekRes.value.days[weekRes.value.days.length - 1]
+        setAttendancePct(last.percentage)
+      }
+      if (wlRes.status === 'fulfilled') setWorkload(wlRes.value.data)
       setLoading(false)
-    })
+    })()
     return () => {
       mounted = false
     }
-  }, [])
+  }, [user])
 
   return (
     <div>
@@ -60,6 +71,24 @@ export default function TeacherDashboard() {
             <StatCard label="Submitted Marks" value={stats?.submittedMarks} icon={Send} variant="accent" index={3} />
             <StatCard label="Approved Marks" value={stats?.approvedMarks} icon={CheckCircle2} variant="success" index={4} />
             <StatCard label="Rejected Marks" value={stats?.rejectedMarks} icon={XCircle} variant="danger" index={5} />
+            {attendancePct !== null && (
+              <StatCard
+                label="Class 5-A Attendance"
+                value={`${attendancePct}%`}
+                icon={CalendarCheck}
+                variant={attendancePct >= 80 ? 'success' : attendancePct >= 60 ? 'warning' : 'danger'}
+                index={6}
+              />
+            )}
+            {workload && (
+              <StatCard
+                label="Workload Utilisation"
+                value={`${workload.summary?.utilizationPercent ?? 0}%`}
+                icon={TrendingUp}
+                variant={(workload.summary?.utilizationPercent || 0) > 80 ? 'danger' : 'primary'}
+                index={7}
+              />
+            )}
           </div>
 
           <div className="grid grid-2-wide">
@@ -106,6 +135,12 @@ export default function TeacherDashboard() {
                   </Button>
                   <Button variant="outline" block onClick={() => navigate('/teacher/rejected-marks')}>
                     Rejected Marks
+                  </Button>
+                  <Button variant="outline" block onClick={() => navigate('/teacher/invigilation')}>
+                    Invigilation Duties
+                  </Button>
+                  <Button variant="outline" block onClick={() => navigate('/teacher/workload')}>
+                    My Workload <ArrowRight size={16} />
                   </Button>
                 </div>
               </div>

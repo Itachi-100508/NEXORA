@@ -55,6 +55,9 @@ export default function StudentDashboard() {
               <Button variant="outline" onClick={() => navigate('/student/marksheet')}>
                 <Download size={16} /> Download Marksheet
               </Button>
+              <Button variant="soft-primary" onClick={() => navigate('/student/journey')}>
+                <GraduationCap size={16} /> Academic Journey
+              </Button>
             </div>
           </div>
           <div className="welcome-art">

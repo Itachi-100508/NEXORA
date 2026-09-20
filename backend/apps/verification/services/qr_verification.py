@@ -1,4 +1,5 @@
 import io
+import os
 import qrcode
 import secrets
 from django.conf import settings
@@ -26,10 +27,17 @@ def get_or_create_verification(student, exam):
     return verification
 
 
-def generate_qr_code_image(verification_token, base_url="http://127.0.0.1:8000"):
+def generate_qr_code_image(verification_token, base_url=None):
     """
     Generates a QR code image as BytesIO stream for the given verification token.
     """
+    if not base_url:
+        env_url = os.getenv('APP_BASE_URL') or os.getenv('VERCEL_URL')
+        if env_url:
+            base_url = f"https://{env_url}" if not env_url.startswith(('http://', 'https://')) else env_url
+        else:
+            base_url = "http://127.0.0.1:8000"
+
     verification_url = f"{base_url.rstrip('/')}/api/verify/result/{verification_token}/"
 
     qr = qrcode.QRCode(

@@ -12,7 +12,7 @@ from apps.results.services import ResultCalculator
 from apps.verification.services import get_or_create_verification, generate_qr_code_image
 
 
-def generate_result_pdf(student, exam, base_url="http://127.0.0.1:8000"):
+def generate_result_pdf(student, exam, base_url=None):
     """
     Generates a professional, publication-ready A4 examination result mark sheet PDF.
     Incorporates ResultCalculator data and embeds QR verification code.
